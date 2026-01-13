@@ -59,6 +59,18 @@
                     ⏹ FINALIZAR
                 </button>
             </div>
+            <div class="mt-8 pt-6 border-t border-gray-700 flex justify-center">
+            <form action="{{ route('partido.reiniciar', $partido->id) }}" method="POST" onsubmit="return confirm('⚠️ ¿ESTÁS SEGURO? \n\nEsto borrará todo el historial de eventos, reiniciará el cronómetro y pondrá el marcador 0-0.\n\nEsta acción no se puede deshacer.');">
+                @csrf
+                <button type="submit" class="group flex items-center gap-2 text-red-500 hover:text-white border border-red-900 hover:bg-red-600 px-4 py-2 rounded transition-all duration-300 text-sm font-bold tracking-widest uppercase">
+                    <span class="group-hover:animate-ping">⚠️</span>
+                    Reiniciar Partido y Borrar Historial
+                    <span class="group-hover:animate-ping">⚠️</span>
+                </button>
+            </form>
+        </div>
+
+
         </div>
 
         {{-- PANELES DE EQUIPOS --}}
@@ -141,9 +153,12 @@
         }
 
         function actualizarRelojVisual(segundos) {
-           if(segundos < 0) seconds = 0; // <--- ERROR 1: Variable 'seconds' no existe
+            if(segundos < 0) segundos = 0; // Corregido 'seconds' a 'segundos'
+
+            // Agregamos Math.floor en ambas líneas para asegurar que sean enteros
             const min = Math.floor(segundos / 60).toString().padStart(2, '0');
-            const sec = (segundos % 60).toString().padStart(2, '0'); // <--- ERROR 2: Falta Math.floor aquí
+            const sec = Math.floor(segundos % 60).toString().padStart(2, '0');
+
             const el = document.getElementById('cronometro');
             if(el) el.innerText = `${min}:${sec}`;
         }

@@ -6,7 +6,8 @@ use Illuminate\Http\Request;
 use App\Services\RabbitMQService;
 use App\Models\Partido;
 use App\Models\Evento;
-use Carbon\Carbon; // Importante para manejar las fechas
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class ArbitroController extends Controller
 {
@@ -15,6 +16,27 @@ class ArbitroController extends Controller
     public function __construct(RabbitMQService $service)
     {
         $this->mqService = $service;
+    }
+
+    // --- AQUÍ ESTÁ EL CAMBIO IMPORTANTE ---
+    // Ahora recibimos el $id como parámetro (viene de la ruta /arbitro/{id})
+    public function panel($id)
+    {
+        // Usamos findOrFail: Si el ID no existe, dará error 404 automáticamente
+        $partido = Partido::findOrFail($id);
+
+        // 3. CÁLCULO DE SEGUNDOS
+        // Esto sincroniza el reloj del árbitro si recarga la página
+        $segundos = 0;
+
+        if ($partido->estado == 'en_curso' && $partido->hora_inicio) {
+            // Calculamos la diferencia en segundos entre el inicio y AHORA
+            $segundos = now()->diffInSeconds(Carbon::parse($partido->hora_inicio));
+        }
+
+        // IMPORTANTE: Asegúrate de que tu archivo de vista se llame 'referee.blade.php'
+        // Si tu archivo se llama 'panel.blade.php', cambia 'referee' por 'panel' abajo.
+        return view('panel', compact('partido', 'segundos'));
     }
 
     public function enviarEvento(Request $request)
@@ -26,7 +48,6 @@ class ArbitroController extends Controller
         ]);
 
         $data = $request->all();
-        // Al tener configurado app.php en 'America/Lima', esto guarda la hora correcta de Perú
         $data['timestamp'] = now()->toDateTimeString();
 
         // 1. GUARDAR EVENTO HISTÓRICO
@@ -50,18 +71,16 @@ class ArbitroController extends Controller
             }
         }
 
-        // Lógica de Estados (CORREGIDA)
+        // Lógica de Estados
         if ($request->tipo === 'INICIO') {
             $partido->estado = 'en_curso';
 
-            // Solo guardamos la hora de inicio si es la primera vez (para no reiniciar el reloj en el 2do tiempo)
-            // O si quieres reiniciar siempre, quita el "if"
+            // Solo guardamos la hora de inicio si es la primera vez o estaba en null
             if (!$partido->hora_inicio) {
                 $partido->hora_inicio = now();
             }
         }
         elseif ($request->tipo === 'ENTRETIEMPO') {
-            // FALTABA ESTO: Actualizar el estado en la DB
             $partido->estado = 'entretiempo';
         }
         elseif ($request->tipo === 'FIN') {
@@ -75,37 +94,29 @@ class ArbitroController extends Controller
         $data['marcador_visitante'] = $partido->goles_visitante;
         $data['estado'] = $partido->estado;
 
-        // 3. ENVIAR A RABBITMQ (Backend-to-Backend)
-        // Esto le avisa al websocket server o a otros servicios
+        // 3. ENVIAR A RABBITMQ
         $routingKey = 'partido.' . $request->partido_id;
         $this->mqService->publish($data, $routingKey);
 
         return response()->json(['status' => 'ok', 'data' => $data]);
     }
 
-    public function panel()
+    public function reiniciarPartido($id)
     {
-        // ID FIJO (Cambiar dinámicamente luego si usas URL params)
-        $partido_id = 1;
+        // OPCIÓN NUCLEAR: Actualización directa a la base de datos
+        DB::table('partidos')
+            ->where('id', $id)
+            ->update([
+                'goles_local' => 0,
+                'goles_visitante' => 0,
+                'estado' => 'PROGRAMADO',
+                'hora_inicio' => null,
+                'updated_at' => now()
+            ]);
 
-        $partido = Partido::find($partido_id);
+        // Borrar el historial de eventos
+        DB::table('eventos')->where('partido_id', $id)->delete();
 
-        if (!$partido) {
-            return "ERROR: No existe el partido ID 1. Créalo en la base de datos.";
-        }
-
-        // 3. CÁLCULO PRECIOSO DE SEGUNDOS
-        // Esto sincroniza el reloj del árbitro si recarga la página
-        $segundos = 0;
-
-        if ($partido->estado == 'en_curso' && $partido->hora_inicio) {
-            // Calculamos la diferencia absoluta en segundos entre el inicio y AHORA
-            // diffInSeconds devuelve un entero positivo
-            $segundos = now()->diffInSeconds(Carbon::parse($partido->hora_inicio));
-        }
-
-        // Usamos compact para pasar el OBJETO completo.
-        // Así en la vista puedes usar $partido->equipo_local en lugar de variables sueltas.
-        return view('panel', compact('partido', 'segundos'));
+        return back()->with('success', 'Partido reiniciado a 0-0 correctamente.');
     }
 }

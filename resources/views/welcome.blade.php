@@ -19,7 +19,7 @@
             <i class="fa-solid fa-play text-red-600 text-2xl"></i>
             <span class="text-xl font-bold tracking-tighter">FUTBOL<span class="text-red-600">PLAY</span></span>
         </div>
-        <a href="{{ route('arbitro.panel') }}" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded text-sm font-semibold transition backdrop-blur-sm">
+        <a href="{{ route('panel') }}" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded text-sm font-semibold transition backdrop-blur-sm">
             Modo Árbitro
         </a>
     </nav>
