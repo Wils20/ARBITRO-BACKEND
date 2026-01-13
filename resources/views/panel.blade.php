@@ -7,8 +7,23 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-800 text-white min-h-screen p-6">
+
+    {{-- 1. CÁLCULO DE TIEMPO SEGURO (PHP) --}}
+    @php
+        $segundos = 0;
+        if($partido->estado == 'en_curso' && $partido->hora_inicio) {
+            // Usamos timestamps para evitar errores de zona horaria
+            $inicio = \Carbon\Carbon::parse($partido->hora_inicio)->timestamp;
+            $ahora = now()->timestamp;
+            $segundos = $ahora - $inicio;
+
+            // Si sale negativo por error de config del servidor, lo forzamos a 0
+            if($segundos < 0) $segundos = 0;
+        }
+    @endphp
 
     <div class="max-w-4xl mx-auto">
         {{-- HEADER DEL PANEL --}}
@@ -23,16 +38,16 @@
 
             <div class="flex justify-center items-center gap-8">
                 {{-- CRONÓMETRO --}}
-                <div class="text-5xl font-mono font-bold text-yellow-400 bg-black px-6 py-2 rounded-lg border border-gray-600" id="cronometro">
+                <div class="text-5xl font-mono font-bold text-yellow-400 bg-black px-6 py-2 rounded-lg border border-gray-600 shadow-[0_0_15px_rgba(250,204,21,0.2)]" id="cronometro">
                     00:00
                 </div>
 
                 {{-- ESTADO --}}
                 @php
                     $claseEstado = match($partido->estado) {
-                        'en_curso' => 'bg-green-600 animate-pulse',
-                        'entretiempo' => 'bg-yellow-600',
-                        'finalizado' => 'bg-red-600',
+                        'en_curso' => 'bg-green-600 animate-pulse shadow-green-500/50',
+                        'entretiempo' => 'bg-yellow-600 shadow-yellow-500/50',
+                        'finalizado' => 'bg-red-600 shadow-red-500/50',
                         default => 'bg-gray-700'
                     };
                     $textoEstado = match($partido->estado) {
@@ -42,176 +57,157 @@
                         default => 'PROGRAMADO'
                     };
                 @endphp
-                <div class="text-xl font-bold px-4 py-2 rounded {{ $claseEstado }}" id="estadoPartido">
+                <div class="text-xl font-bold px-4 py-2 rounded shadow-lg {{ $claseEstado }}" id="estadoPartido">
                     {{ $textoEstado }}
                 </div>
             </div>
 
             {{-- BOTONES DE CONTROL DE TIEMPO --}}
             <div class="flex justify-center gap-4 mt-8">
-                <button onclick="controlPartido('INICIO')" class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-6 rounded shadow-lg transform active:scale-95 transition">
+                <button onclick="controlPartido('INICIO')" class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-6 rounded shadow-lg transform active:scale-95 transition border-b-4 border-green-800 active:border-0 active:translate-y-1">
                     ▶ INICIAR
                 </button>
-                <button onclick="controlPartido('ENTRETIEMPO')" class="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-3 px-6 rounded shadow-lg transform active:scale-95 transition">
+                <button onclick="controlPartido('ENTRETIEMPO')" class="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-3 px-6 rounded shadow-lg transform active:scale-95 transition border-b-4 border-yellow-800 active:border-0 active:translate-y-1">
                     ⏸ ENTRETIEMPO
                 </button>
-                <button onclick="controlPartido('FIN')" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-6 rounded shadow-lg transform active:scale-95 transition">
+                <button onclick="controlPartido('FIN')" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-6 rounded shadow-lg transform active:scale-95 transition border-b-4 border-red-800 active:border-0 active:translate-y-1">
                     ⏹ FINALIZAR
                 </button>
             </div>
+
+            {{-- ZONA DE PELIGRO (RESET) --}}
             <div class="mt-8 pt-6 border-t border-gray-700 flex justify-center">
-            <form action="{{ route('partido.reiniciar', $partido->id) }}" method="POST" onsubmit="return confirm('⚠️ ¿ESTÁS SEGURO? \n\nEsto borrará todo el historial de eventos, reiniciará el cronómetro y pondrá el marcador 0-0.\n\nEsta acción no se puede deshacer.');">
-                @csrf
-                <button type="submit" class="group flex items-center gap-2 text-red-500 hover:text-white border border-red-900 hover:bg-red-600 px-4 py-2 rounded transition-all duration-300 text-sm font-bold tracking-widest uppercase">
-                    <span class="group-hover:animate-ping">⚠️</span>
-                    Reiniciar Partido y Borrar Historial
-                    <span class="group-hover:animate-ping">⚠️</span>
-                </button>
-            </form>
-        </div>
-
-
+                <form action="{{ route('partido.reiniciar', $partido->id) }}" method="POST" onsubmit="return confirm('⚠️ ¡ATENCIÓN ARBITRO! ⚠️\n\nEstás a punto de REINICIAR el partido.\n\n- Se borrarán todos los goles.\n- Se borrarán las tarjetas.\n- El cronómetro volverá a 00:00.\n\n¿Estás seguro de continuar?');">
+                    @csrf
+                    <button type="submit" class="group flex items-center gap-2 text-red-500 hover:text-white border border-red-900 hover:bg-red-600 px-4 py-2 rounded transition-all duration-300 text-sm font-bold tracking-widest uppercase hover:shadow-[0_0_15px_rgba(220,38,38,0.5)]">
+                        <i class="fa-solid fa-triangle-exclamation group-hover:animate-bounce"></i>
+                        Reiniciar Partido a Cero
+                        <i class="fa-solid fa-triangle-exclamation group-hover:animate-bounce"></i>
+                    </button>
+                </form>
+            </div>
         </div>
 
         {{-- PANELES DE EQUIPOS --}}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-
             {{-- EQUIPO LOCAL --}}
-            <div class="bg-blue-900/30 p-6 rounded-2xl border border-blue-500/30">
+            <div class="bg-blue-900/20 p-6 rounded-2xl border border-blue-500/30 shadow-xl">
                 <h2 class="text-2xl font-bold text-center text-blue-400 mb-6 flex justify-between items-center px-2">
                     <span class="truncate w-2/3 text-left">{{ $partido->equipo_local }}</span>
-                    <span id="txtGolesLocal" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-4xl shadow-inner border border-blue-400">
+                    <span id="txtGolesLocal" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-4xl shadow-lg border border-blue-400">
                         {{ $partido->goles_local }}
                     </span>
                 </h2>
                 <div class="space-y-4">
-                    <button onclick="eventoEquipo('GOL', '{{ $partido->equipo_local }}')" class="w-full bg-green-600 hover:bg-green-500 py-4 rounded-xl font-bold text-xl shadow-lg border-b-4 border-green-800 active:border-0 active:translate-y-1 transition">
+                    <button onclick="eventoEquipo('GOL', '{{ $partido->equipo_local }}')" class="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold text-xl shadow-lg border-b-4 border-blue-800 active:border-0 active:translate-y-1 transition text-white">
                         ⚽ GOL LOCAL
                     </button>
                     <div class="grid grid-cols-2 gap-4">
-                        <button onclick="eventoEquipo('TARJETA_AMARILLA', '{{ $partido->equipo_local }}')" class="bg-yellow-500 hover:bg-yellow-400 py-3 rounded-lg font-bold text-black">🟨 Amarilla</button>
-                        <button onclick="eventoEquipo('TARJETA_ROJA', '{{ $partido->equipo_local }}')" class="bg-red-600 hover:bg-red-500 py-3 rounded-lg font-bold">🟥 Roja</button>
+                        <button onclick="eventoEquipo('TARJETA_AMARILLA', '{{ $partido->equipo_local }}')" class="bg-yellow-500 hover:bg-yellow-400 py-3 rounded-lg font-bold text-black border-b-4 border-yellow-700 active:border-0 active:translate-y-1">🟨 Amarilla</button>
+                        <button onclick="eventoEquipo('TARJETA_ROJA', '{{ $partido->equipo_local }}')" class="bg-red-600 hover:bg-red-500 py-3 rounded-lg font-bold text-white border-b-4 border-red-800 active:border-0 active:translate-y-1">🟥 Roja</button>
                     </div>
-                    <button onclick="eventoCambio('{{ $partido->equipo_local }}')" class="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-bold border border-gray-500">🔄 Cambio</button>
+                    <button onclick="eventoCambio('{{ $partido->equipo_local }}')" class="w-full bg-slate-700 hover:bg-slate-600 py-3 rounded-lg font-bold border border-slate-500">🔄 Cambio</button>
                 </div>
             </div>
 
             {{-- EQUIPO VISITA --}}
-            <div class="bg-indigo-900/30 p-6 rounded-2xl border border-indigo-500/30">
+            <div class="bg-indigo-900/20 p-6 rounded-2xl border border-indigo-500/30 shadow-xl">
                 <h2 class="text-2xl font-bold text-center text-indigo-400 mb-6 flex justify-between items-center px-2">
                     <span class="truncate w-2/3 text-left">{{ $partido->equipo_visitante }}</span>
-                    <span id="txtGolesVisita" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-4xl shadow-inner border border-indigo-400">
+                    <span id="txtGolesVisita" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-4xl shadow-lg border border-indigo-400">
                         {{ $partido->goles_visitante }}
                     </span>
                 </h2>
                 <div class="space-y-4">
-                    <button onclick="eventoEquipo('GOL', '{{ $partido->equipo_visitante }}')" class="w-full bg-green-600 hover:bg-green-500 py-4 rounded-xl font-bold text-xl shadow-lg border-b-4 border-green-800 active:border-0 active:translate-y-1 transition">
+                    <button onclick="eventoEquipo('GOL', '{{ $partido->equipo_visitante }}')" class="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-bold text-xl shadow-lg border-b-4 border-indigo-800 active:border-0 active:translate-y-1 transition text-white">
                         ⚽ GOL VISITA
                     </button>
                     <div class="grid grid-cols-2 gap-4">
-                        <button onclick="eventoEquipo('TARJETA_AMARILLA', '{{ $partido->equipo_visitante }}')" class="bg-yellow-500 hover:bg-yellow-400 py-3 rounded-lg font-bold text-black">🟨 Amarilla</button>
-                        <button onclick="eventoEquipo('TARJETA_ROJA', '{{ $partido->equipo_visitante }}')" class="bg-red-600 hover:bg-red-500 py-3 rounded-lg font-bold">🟥 Roja</button>
+                        <button onclick="eventoEquipo('TARJETA_AMARILLA', '{{ $partido->equipo_visitante }}')" class="bg-yellow-500 hover:bg-yellow-400 py-3 rounded-lg font-bold text-black border-b-4 border-yellow-700 active:border-0 active:translate-y-1">🟨 Amarilla</button>
+                        <button onclick="eventoEquipo('TARJETA_ROJA', '{{ $partido->equipo_visitante }}')" class="bg-red-600 hover:bg-red-500 py-3 rounded-lg font-bold text-white border-b-4 border-red-800 active:border-0 active:translate-y-1">🟥 Roja</button>
                     </div>
-                    <button onclick="eventoCambio('{{ $partido->equipo_visitante }}')" class="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-bold border border-gray-500">🔄 Cambio</button>
+                    <button onclick="eventoCambio('{{ $partido->equipo_visitante }}')" class="w-full bg-slate-700 hover:bg-slate-600 py-3 rounded-lg font-bold border border-slate-500">🔄 Cambio</button>
                 </div>
             </div>
-
         </div>
     </div>
 
-    {{-- SCRIPTS (Versión Corregida y Optimizada) --}}
+    {{-- SCRIPTS OPTIMIZADOS --}}
     <script>
-        // 1. VARIABLES INICIALES DESDE BLADE
+        // VARIABLES GLOBALES
         let contLocal = {{ $partido->goles_local }};
         let contVisita = {{ $partido->goles_visitante }};
 
-        // RELOJ INTELIGENTE
-        // Recibimos los segundos que ya pasaron desde el inicio (calculados por PHP/Carbon)
-        let segundosIniciales = {{ $segundos ?? 0 }};
-        let tiempoCarga = Date.now(); // Marca de tiempo del navegador
+        // Carga segura del tiempo desde PHP (Entero)
+        let segundosIniciales = parseInt("{{ $segundos }}");
+        let tiempoCarga = Date.now();
         let intervalo = null;
         let estadoActual = "{{ $partido->estado }}";
 
-        // Iniciar automáticamente si está en curso
+        // Iniciar reloj si ya está corriendo
         if(estadoActual === 'en_curso') {
             iniciarCronometro();
+            // Actualizar vista inicial inmediatamente
+            actualizarRelojVisual(segundosIniciales);
+        } else {
+            // Si está pausado o no iniciado, mostrar 00:00
+            actualizarRelojVisual(0);
         }
 
-        // 2. FUNCIONES DEL RELOJ
+        // --- FUNCIONES DEL RELOJ ---
         function iniciarCronometro() {
             if (intervalo) return;
             actualizarEstadoVisual('en_curso');
 
             intervalo = setInterval(() => {
-                // Cálculo de deriva: (Ahora - TiempoCarga) + SegundosQueYaTraiaElServidor
+                // Cálculo robusto: Tiempo PHP + Tiempo Transcurrido JS
                 const ahora = Date.now();
                 const diferencia = Math.floor((ahora - tiempoCarga) / 1000);
-                const totalSegundos = segundosIniciales + diferencia;
+                let totalSegundos = segundosIniciales + diferencia;
 
                 actualizarRelojVisual(totalSegundos);
             }, 1000);
         }
 
         function actualizarRelojVisual(segundos) {
-            if(segundos < 0) segundos = 0; // Corregido 'seconds' a 'segundos'
+            // Protección contra negativos y decimales
+            if(segundos < 0) segundos = 0;
+            segundos = Math.floor(segundos);
 
-            // Agregamos Math.floor en ambas líneas para asegurar que sean enteros
             const min = Math.floor(segundos / 60).toString().padStart(2, '0');
-            const sec = Math.floor(segundos % 60).toString().padStart(2, '0');
+            const sec = (segundos % 60).toString().padStart(2, '0');
 
             const el = document.getElementById('cronometro');
             if(el) el.innerText = `${min}:${sec}`;
         }
 
         function pausarCronometro() {
-            clearInterval(intervalo);
-            intervalo = null;
-        }
-
-        function getMinutoActual() {
-            // Obtenemos el minuto visual + 1
-            const texto = document.getElementById('cronometro').innerText;
-            const partes = texto.split(':');
-            return parseInt(partes[0]) + 1;
-        }
-
-        // 3. COMUNICACIÓN CON EL SERVIDOR
-        async function enviarApi(payload) {
-            try {
-                const response = await fetch("{{ route('evento.store') }}", {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
-                    body: JSON.stringify(payload)
-                });
-
-                if(response.ok) {
-                    const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
-                    Toast.fire({ icon: 'success', title: 'Guardado' });
-                } else {
-                    throw new Error('Error Server');
-                }
-            } catch (error) {
-                Swal.fire('Error', 'No se pudo guardar', 'error');
+            if(intervalo) {
+                clearInterval(intervalo);
+                intervalo = null;
             }
         }
 
-        // 4. BOTONES
+        function getMinutoActual() {
+            const texto = document.getElementById('cronometro').innerText;
+            const partes = texto.split(':');
+            // Retornamos el minuto actual + 1 para registros de eventos (ej: minuto 0:30 es el 1')
+            return parseInt(partes[0]) + 1;
+        }
+
+        // --- API Y CONTROL ---
         function controlPartido(tipo) {
             if(tipo === 'INICIO') {
+                // Si iniciamos, reseteamos la marca de tiempo de JS para contar desde AHORA
                 tiempoCarga = Date.now();
-                segundosIniciales = 0; // Ojo: Si reanudas un partido pausado, esto debería ser diferente, pero para tu caso básico sirve.
+                // Si el partido estaba en 0, iniciamos desde 0.
+                // Si quisieras reanudar un entretiempo, aquí habría lógica extra,
+                // pero para este caso asumimos continuidad simple.
                 iniciarCronometro();
-                actualizarEstadoVisual('en_curso');
-            } else if(tipo === 'ENTRETIEMPO') {
+            } else {
                 pausarCronometro();
-                actualizarEstadoVisual('entretiempo');
-            } else if(tipo === 'FIN') {
-                pausarCronometro();
-                actualizarEstadoVisual('finalizado');
+                if(tipo === 'ENTRETIEMPO') actualizarEstadoVisual('entretiempo');
+                if(tipo === 'FIN') actualizarEstadoVisual('finalizado');
             }
 
             enviarApi({
@@ -225,26 +221,50 @@
             const div = document.getElementById('estadoPartido');
             if(estado === 'en_curso') {
                 div.innerText = "EN JUEGO";
-                div.className = "text-xl font-bold px-4 py-2 rounded bg-green-600 animate-pulse";
+                div.className = "text-xl font-bold px-4 py-2 rounded bg-green-600 animate-pulse shadow-green-500/50";
             } else if (estado === 'entretiempo') {
                 div.innerText = "ENTRETIEMPO";
-                div.className = "text-xl font-bold px-4 py-2 rounded bg-yellow-600";
+                div.className = "text-xl font-bold px-4 py-2 rounded bg-yellow-600 shadow-yellow-500/50";
             } else {
                 div.innerText = "FINALIZADO";
-                div.className = "text-xl font-bold px-4 py-2 rounded bg-red-600";
+                div.className = "text-xl font-bold px-4 py-2 rounded bg-red-600 shadow-red-500/50";
             }
         }
 
+        async function enviarApi(payload) {
+            try {
+                const response = await fetch("{{ route('evento.store') }}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    },
+                    body: JSON.stringify(payload)
+                });
+                if(response.ok) {
+                    const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+                    Toast.fire({ icon: 'success', title: 'Registrado' });
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        // --- EVENTOS DE JUEGO ---
         async function eventoEquipo(tipo, equipo) {
             const { value: jugador } = await Swal.fire({
-                title: tipo + ' para ' + equipo,
+                title: tipo.replace('_', ' ') + ' - ' + equipo,
                 input: 'text',
-                inputPlaceholder: 'Jugador...',
-                showCancelButton: true
+                inputPlaceholder: 'Nombre del Jugador o Nro',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Registrar'
             });
 
             if (jugador) {
-                // Optimista
+                // Actualización Optimista del Marcador
                 if(tipo === 'GOL') {
                     if(equipo === "{{ $partido->equipo_local }}") {
                         contLocal++;
@@ -267,13 +287,15 @@
 
         async function eventoCambio(equipo) {
             const { value: formValues } = await Swal.fire({
-                title: 'Cambio ' + equipo,
-                html: '<input id="swal-out" class="swal2-input" placeholder="Sale"><input id="swal-in" class="swal2-input" placeholder="Entra">',
+                title: 'Cambio en ' + equipo,
+                html: '<input id="swal-out" class="swal2-input" placeholder="Sale (Jugador/Nro)">' +
+                      '<input id="swal-in" class="swal2-input" placeholder="Entra (Jugador/Nro)">',
                 focusConfirm: false,
+                confirmButtonText: 'Realizar Cambio',
                 preConfirm: () => [document.getElementById('swal-out').value, document.getElementById('swal-in').value]
             });
 
-            if (formValues) {
+            if (formValues && formValues[0] && formValues[1]) {
                 enviarApi({
                     partido_id: {{ $partido->id }},
                     tipo: 'CAMBIO',
